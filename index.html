@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AIVA Voice Assistant</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background: linear-gradient(135deg, #1a1a2e, #16213e);
+      color: white;
+      height: 100vh;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      overflow: hidden;
+    }
+
+    .container {
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hologram {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      margin: 0 auto 30px;
+    }
+
+    .circle {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0, 212, 255, 0.2) 0%, rgba(9, 9, 121, 0) 70%);
+      box-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+      animation: float 3s ease-in-out infinite;
+    }
+
+    .pulse {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      background: rgba(0, 212, 255, 0.1);
+      transform: scale(0.5);
+      animation: pulse 2s ease-out infinite;
+    }
+
+    #status {
+      font-size: 1.2rem;
+      margin-top: 20px;
+      padding: 15px 25px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      backdrop-filter: blur(5px);
+      max-width: 300px;
+      margin-left: auto;
+      margin-right: auto;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #transcript {
+      margin-top: 15px;
+      color: rgba(255, 255, 255, 0.7);
+      font-style: italic;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.5); opacity: 1; }
+      100% { transform: scale(1.5); opacity: 0; }
+    }
+
+    .listening .circle {
+      background: radial-gradient(circle, rgba(0, 212, 255, 0.4) 0%, rgba(9, 9, 121, 0) 70%);
+      box-shadow: 0 0 30px rgba(0, 212, 255, 0.8);
+    }
+
+    .error {
+      color: #ff6b6b;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hologram">
+      <div class="circle"></div>
+      <div class="pulse"></div>
+    </div>
+    <div id="status">Initializing voice assistant...</div>
+    <div id="transcript"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Speech recognition setup
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        document.getElementById('status').textContent = "Speech recognition not supported in this browser.";
+        return;
+      }
+
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+      recognition.maxAlternatives = 3; // Get multiple recognition alternatives for better accuracy
+
+      const statusEl = document.getElementById('status');
+      const transcriptEl = document.getElementById('transcript');
+      const hologram = document.querySelector('.hologram');
+
+      let isAwake = false;
+      let finalTranscript = '';
+      let timeoutId;
+
+      // Load voices for speech synthesis
+      let voices = [];
+      window.speechSynthesis.onvoiceschanged = () => {
+        voices = window.speechSynthesis.getVoices();
+      };
+
+      function startRecognition() {
+        try {
+          recognition.start();
+          hologram.classList.add('listening');
+          console.log("Recognition started");
+        } catch (e) {
+          console.error("Recognition start error:", e);
+          setTimeout(startRecognition, 1000);
+        }
+      }
+
+      function resetTimeout() {
+        clearTimeout(timeoutId);
+        if (isAwake) {
+          timeoutId = setTimeout(() => {
+            isAwake = false;
+            statusEl.textContent = "Standing by for 'Hey AIVA'...";
+            speak("Going to sleep now. Say 'Hey AIVA' to wake me up.");
+            hologram.classList.remove('listening');
+          }, 15000); // 15 seconds of inactivity
+        }
+      }
+
+      recognition.onstart = () => {
+        statusEl.textContent = isAwake ? "Listening to you now... 🎧" : "Waiting for 'Hey AIVA'... 🎙️";
+      };
+
+      recognition.onend = () => {
+        console.log('Recognition ended, restarting...');
+        hologram.classList.remove('listening');
+        setTimeout(startRecognition, 500);
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Recognition error:', event.error);
+        hologram.classList.remove('listening');
+        
+        if (event.error === 'no-speech') {
+          statusEl.textContent = "No speech detected. Try again.";
+        } else if (event.error === 'audio-capture') {
+          statusEl.textContent = "No microphone found. Please check your microphone.";
+        } else {
+          statusEl.textContent = `Error: ${event.error}`;
+        }
+        
+        statusEl.classList.add('error');
+        setTimeout(() => statusEl.classList.remove('error'), 2000);
+      };
+
+      recognition.onresult = (event) => {
+        let interimTranscript = '';
+        finalTranscript = '';
+
+        // Combine all results for better accuracy
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const transcript = event.results[i][0].transcript;
+          if (event.results[i].isFinal) {
+            finalTranscript += transcript;
+          } else {
+            interimTranscript += transcript;
+          }
+        }
+
+        transcriptEl.textContent = interimTranscript;
+
+        if (finalTranscript) {
+          transcriptEl.textContent = finalTranscript;
+          processTranscript(finalTranscript.toLowerCase());
+        }
+      };
+
+      function processTranscript(transcript) {
+        console.log("Processing:", transcript);
+        
+        if (!isAwake) {
+          // Check for wake word with some flexibility
+          if (/(hey|hi|okay|ok)\s*aiva/i.test(transcript) || /aiva/i.test(transcript)) {
+            wakeUp();
+          }
+          return;
+        }
+
+        // Handle commands
+        handleCommand(transcript);
+        resetTimeout();
+      }
+
+      function wakeUp() {
+        isAwake = true;
+        statusEl.textContent = "Listening to you now... 🎧";
+        hologram.classList.add('listening');
+        speak("Hello! How can I assist you today?");
+        resetTimeout();
+      }
+
+      function handleCommand(command) {
+        let response = "";
+        let shouldRespond = true;
+
+        if (command.includes("how are you")) {
+          response = "I'm functioning perfectly, thank you for asking! How about you?";
+        } 
+        else if (command.includes("your name")) {
+          response = "I'm AIVA, your virtual assistant. Nice to meet you!";
+        } 
+        else if (/open\s+(google|chrome)/i.test(command)) {
+          response = "Opening Google for you.";
+          window.open("https://www.google.com", "_blank");
+        } 
+        else if (/open\s+(youtube)/i.test(command)) {
+          response = "Opening YouTube.";
+          window.open("https://www.youtube.com", "_blank");
+        } 
+        else if (/(what('s| is) the )?time/i.test(command) || /current time/i.test(command)) {
+          const now = new Date();
+          const hours = now.getHours();
+          const minutes = now.getMinutes().toString().padStart(2, '0');
+          const ampm = hours >= 12 ? 'PM' : 'AM';
+          const hours12 = hours % 12 || 12;
+          response = `The current time is ${hours12}:${minutes} ${ampm}.`;
+        } 
+        else if (/(stop|sleep|go away)/i.test(command)) {
+          response = "Okay, I'll go to sleep now. Say 'Hey AIVA' to wake me up.";
+          isAwake = false;
+          statusEl.textContent = "Standing by for 'Hey AIVA'...";
+          hologram.classList.remove('listening');
+        } 
+        else if (/thank|thanks/i.test(command)) {
+          response = "You're welcome! Is there anything else I can help with?";
+        }
+        else {
+          shouldRespond = false;
+        }
+
+        if (shouldRespond) {
+          speak(response);
+        } else if (isAwake) {
+          speak("I'm not sure how to respond to that. Try asking me something else.");
+        }
+      }
+
+      function speak(text) {
+        if (!text) return;
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        
+        // Try to find a pleasant voice
+        const preferredVoices = ['zira', 'samantha', 'serena', 'google uk english female'];
+        const voice = voices.find(v => preferredVoices.some(name => v.name.toLowerCase().includes(name))) || voices[0];
+        
+        if (voice) {
+          utterance.voice = voice;
+        }
+        
+        utterance.onend = () => {
+          console.log('Finished speaking');
+        };
+        
+        window.speechSynthesis.speak(utterance);
+      }
+
+      // Initialize
+      setTimeout(() => {
+        if (voices.length === 0) {
+          voices = window.speechSynthesis.getVoices();
+        }
+        statusEl.textContent = "Standing by for 'Hey AIVA'...";
+        startRecognition();
+      }, 500);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+// Setup Speech Recognition
+const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const recognition = new SpeechRecognition();
+recognition.continuous = true;
+recognition.interimResults = false; // Only get final results
+recognition.lang = 'en-US';
+
+const statusEl = document.getElementById('status');
+
+function startRecognition() {
+  recognition.start();
+  console.log("Listening...");
+  statusEl.innerText = "Listening to you... 🎙️";
+}
+
+recognition.onstart = () => {
+  console.log('Voice recognition started.');
+};
+
+recognition.onend = () => {
+  console.log('Voice recognition ended. Restarting...');
+  startRecognition(); // Always restart after stopping
+};
+
+recognition.onresult = (event) => {
+  const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
+  console.log('User said:', transcript);
+
+  // Directly handle commands without any wake word
+  handleCommand(transcript);
+};
+
+recognition.onerror = (event) => {
+  console.error('Speech recognition error:', event.error);
+  statusEl.innerText = `Error: ${event.error}`;
+};
+
+function handleCommand(command) {
+  let response = "";
+
+  if (command.includes("how are you")) {
+    response = "I am feeling fully operational. And you?";
+  } else if (command.includes("what is your name")) {
+    response = "I am AIVA, your assistant.";
+  } else if (command.includes("open google")) {
+    response = "Opening Google.";
+    window.open("https://www.google.com", "_blank");
+  } else if (command.includes("what time") || command.includes("current time")) {
+    const now = new Date();
+    response = `It is ${now.getHours()} ${now.getMinutes()} right now.`;
+  } else if (command.includes("stop listening") || command.includes("sleep")) {
+    response = "Entering sleep mode.";
+    recognition.stop();
+    statusEl.innerText = "Stopped listening.";
+    return; // Do not restart immediately
+  } else {
+    response = "I heard you, but I'm not programmed to respond to that yet.";
+  }
+
+  speak(response);
+}
+
+function speak(text) {
+  const utterance = new SpeechSynthesisUtterance(text);
+  const voices = window.speechSynthesis.getVoices();
+  utterance.voice = voices.find(voice => voice.name.toLowerCase().includes('zira') || voice.name.toLowerCase().includes('cortana')) || voices[0];
+  utterance.rate = 1;
+  window.speechSynthesis.speak(utterance);
+}
+
+// Start listening at launch
+startRecognition();
